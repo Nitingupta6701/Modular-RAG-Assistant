@@ -1,0 +1,25 @@
+
+# LangChain core and integrations
+langchain
+langchain-community
+langchain-text-splitters
+langchain-huggingface
+langchain-chroma
+langchain-google-genai
+
+# PDF processing
+pypdf
+
+# Embeddings and vector database
+sentence-transformers
+chromadb
+numpy<3
+
+# Environment configuration
+python-dotenv
+
+# Web application
+streamlit
+
+# Testing
+pytest
