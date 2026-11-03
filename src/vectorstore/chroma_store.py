@@ -67,3 +67,17 @@ class ChromaStore:
         """
 
         return self.collection.count()
+
+    def delete_by_filename(self, file_name: str):
+        """
+        Delete all stored chunks belonging to a file.
+        """
+
+        if not file_name.strip():
+            raise ValueError("File name cannot be empty.")
+
+        self.collection.delete(
+            where={"file_name": file_name}
+        )
+
+        print(f"Deleted existing chunks for: {file_name}")
