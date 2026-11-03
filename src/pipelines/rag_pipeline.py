@@ -31,6 +31,9 @@ class RAGPipeline:
             else ConversationMemory()
         )
 
+        # Stores metadata from the latest streaming request
+        self.last_stream_metadata = {}
+
         print("RAG Pipeline initialized successfully!")
 
     def ask(
@@ -95,6 +98,7 @@ class RAGPipeline:
 
             source_name = metadata.get("file_name", "Unknown")
             page_number = metadata.get("page", "Unknown")
+            score = document["score"]
 
             context_parts.append(
                 f"""
@@ -109,7 +113,7 @@ Content:
             sources.append({
                 "file_name": source_name,
                 "page": page_number,
-                "score": round(document["score"], 4)
+                "score": round(score, 4)
             })
 
         context = "\n".join(context_parts)
@@ -146,9 +150,19 @@ Content:
         top_k: int = 5,
         min_score: float = 0.20
     ):
+        """
+        Generate a streaming RAG answer.
+
+        Answer chunks are yielded as strings.
+        Source information is stored separately
+        in self.last_stream_metadata.
+        """
 
         if not question.strip():
             raise ValueError("Question cannot be empty.")
+
+        # Reset metadata for the new request
+        self.last_stream_metadata = {}
 
         # Step 1: Get conversation history
         history = (
@@ -178,6 +192,14 @@ Content:
                 "in the uploaded documents."
             )
 
+            self.last_stream_metadata = {
+                "question": question,
+                "rewritten_query": rewritten_query,
+                "sources": [],
+                "retrieved_chunks": 0,
+                "answer": answer
+            }
+
             self.conversation_memory.add_message(
                 user_message=question,
                 assistant_message=answer
@@ -186,22 +208,33 @@ Content:
             yield answer
             return
 
-        # Step 5: Prepare context
+        # Step 5: Prepare context and source metadata
         context_parts = []
+        sources = []
 
         for document in retrieved_documents:
 
             metadata = document["metadata"]
 
+            source_name = metadata.get("file_name", "Unknown")
+            page_number = metadata.get("page", "Unknown")
+            score = document["score"]
+
             context_parts.append(
                 f"""
-Source: {metadata.get("file_name", "Unknown")}
-Page: {metadata.get("page", "Unknown")}
+Source: {source_name}
+Page: {page_number}
 
 Content:
 {document["page_content"]}
 """
             )
+
+            sources.append({
+                "file_name": source_name,
+                "page": page_number,
+                "score": round(score, 4)
+            })
 
         context = "\n".join(context_parts)
 
@@ -212,7 +245,16 @@ Content:
             chat_history=history
         )
 
-        # Step 7: Generate streaming answer
+        # Step 7: Store metadata before streaming
+        self.last_stream_metadata = {
+            "question": question,
+            "rewritten_query": rewritten_query,
+            "sources": sources,
+            "retrieved_chunks": len(retrieved_documents),
+            "answer": ""
+        }
+
+        # Step 8: Generate streaming answer
         complete_answer = ""
 
         for chunk in self.llm_generator.generate_stream(prompt):
@@ -221,7 +263,10 @@ Content:
 
             yield chunk
 
-        # Step 8: Save complete answer in memory
+        # Step 9: Update metadata with complete answer
+        self.last_stream_metadata["answer"] = complete_answer
+
+        # Step 10: Save complete answer in memory
         if complete_answer.strip():
 
             self.conversation_memory.add_message(
